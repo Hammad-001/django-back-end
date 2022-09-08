@@ -173,12 +173,16 @@ class UserEnrollSerializer(serializers.ModelSerializer):
         rep['courseid'] = UserCourseSerializer(instance.courseid).data
         return rep
 
-    def validate(self, attrs):
-        if attrs.get("result") >100 | attrs.get('result') < 0:
-            raise serializers.ValidationError(
-                "Marks should be in range 0-100!")
-        return super().validate(attrs)
-
+class UserAttendanceSerializerNew(serializers.ModelSerializer):
+    class Meta:
+        model = Attendance
+        fields = ['id','date', 'isabsent']
+        
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep['studentid'] = UserProfileSerializer(instance.studentid).data
+        rep['courseid'] = UserCourseSerializer(instance.courseid).data
+        return rep
 
 class UserAttendanceSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)

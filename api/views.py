@@ -15,7 +15,7 @@ from api.renderers import UserRenderer
 # serializers
 from api.serializer import SendEmailTOUserForPasswordResetSerializer, UserAttendanceSerializer, UserChangePasswordSerializer, UserEnrollSerializer, UserInstructors, UserInstructorsSerializer,\
     UserLoginSerializer, UserPasswordRestSerializer, UserProfileSerializer, UserRegistrationSerializer,\
-    UserCourseSerializer
+    UserCourseSerializer, UserAttendanceSerializerNew
 
 
 # creating custom user auth token
@@ -291,9 +291,9 @@ class UserEnrollView(APIView):
 
     def post(self, request, format=None):
         if request.user.usertype == 'student':
-            if Enrolled.objects.filter(courseid=request.data["courseid"],studentid=request.data['studentid']):
-                return Response({"msg": "Enrollment Already Exists!"}, status=status.HTTP_200_OK)
             request.data['studentid'] = request.user.id
+            if Enrolled.objects.filter(courseid=request.data["courseid"], studentid=request.data['studentid']):
+                return Response({"msg": "Enrollment Already Exists!"}, status=status.HTTP_200_OK)
             serializer = UserEnrollSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             serializer.save()
@@ -301,20 +301,29 @@ class UserEnrollView(APIView):
             return Response({"msg": "Enrollment is Registered."}, status=status.HTTP_201_CREATED)
 
         if request.user.usertype == 'teacher':
+            if request.data['result'] > 100 or request.data['result'] < 0: 
+                return Response({"msg": "Marks should be in range 0-100."}, status=status.HTTP_201_CREATED)
             serializer = UserEnrollSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             serializer.save()
 
         return Response({'error': "Only Students can add and delete data!"}, status=status.HTTP_401_UNAUTHORIZED)
 
-    def patch(self,request, format=None):
+    def patch(self, request, format=None):
         if request.user.usertype == 'teacher':
-            serializer = UserEnrollSerializer( data=request.data, many=True)
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
+            for obj in request.data:
+                try:
+                    enrolled = Enrolled.objects.get(pk=obj['id'])
+                except:
+                    return Response({'error': "Course Not Found!"}, status=status.HTTP_404_NOT_FOUND)
+
+                if enrolled:
+                    enrolled.result = obj['result']
+                    enrolled.save()
+
             return Response({'msg': 'Marks added successfully!'}, status=status.HTTP_200_OK)
+
         return Response({'error': "Only Teachers can add and delete data!"}, status=status.HTTP_401_UNAUTHORIZED)
-            
 
     def delete(self, request, format=None):
         if request.user.usertype == 'student':
@@ -339,13 +348,14 @@ class UserAttendanceView(APIView):
 
     def get(self, request, format=None):
         if request.user.usertype == 'student':
+            print(request.GET.get('courseid'))
             try:
                 attendance = Attendance.objects.filter(
-                    studentid=request.user.id, courseid=request.data['courseid'])
+                    studentid=request.user.id, courseid=request.GET.get('courseid'))
             except:
-                return Response({'error': "Invalid Course ID!"}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response({'msg': "No Attendance Record Found!"}, status=status.HTTP_200_OK)
 
-            serializer = UserAttendanceSerializer(attendance, many=True)
+            serializer = UserAttendanceSerializerNew(attendance, many=True)
 
             return Response({"attendance": serializer.data},
                             status=status.HTTP_200_OK)
