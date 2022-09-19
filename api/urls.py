@@ -3,7 +3,7 @@ from django.urls import path
 
 # views
 from api.views import SendEmailToUserForPasswordRestView, UserChangePasswordView, UserLogOut, \
-    UserLoginView, UserPasswordRestView, UserProfileView, UserView, UserCourseView, UserEnrollView,\
+    UserLoginView, UserPasswordResetView, UserProfileView, UserView, UserCourseView, UserEnrollView,\
          UserInstructorsView, UserAttendanceView
 
 # from rest_framework_simplejwt.views import TokenRefreshView
@@ -19,7 +19,7 @@ urlpatterns = [
     path('password-reset/', SendEmailToUserForPasswordRestView.as_view(),
          name='passwordrestemail'),
     path('password-reset/<uid>/<token>/',
-         UserPasswordRestView.as_view(), name='passwordrest'),
+         UserPasswordResetView.as_view(), name='passwordrest'),
 
     # For Users View
     path('courses/', UserCourseView.as_view(), name='userCourses'),

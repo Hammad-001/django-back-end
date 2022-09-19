@@ -1,5 +1,5 @@
 # Response and permissions
-from xml.etree.ElementTree import QName
+from curses.panel import update_panels
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -7,24 +7,21 @@ from rest_framework.permissions import IsAuthenticated
 
 # for auth
 from django.contrib.auth import authenticate, logout
-from django.contrib.auth.hashers import check_password
 
 # for rendering errors
 from api.renderers import UserRenderer
 
 # serializers
-from api.serializer import SendEmailTOUserForPasswordResetSerializer, UserAttendanceSerializer, UserChangePasswordSerializer, UserEnrollSerializer, UserInstructors, UserInstructorsSerializer,\
-    UserLoginSerializer, UserPasswordRestSerializer, UserProfileSerializer, UserRegistrationSerializer,\
-    UserCourseSerializer, UserAttendanceSerializerNew
+from api.serializer import SendEmailTOUserForPasswordResetSerializer, UserAttendanceSerializer, UserChangePasswordSerializer, UserEnrollSerializer, \
+    UserPasswordRestSerializer, UserProfileSerializer, UserRegistrationSerializer,\
+    UserCourseSerializer, UserAttendanceSerializerNew, UserInstructorsSerializer, UserCourseDetailViewSerializer
 
 
 # creating custom user auth token
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from api.models import Course, Enrolled
-from api.models import User, Attendance, Instructors
-
-from django.db.models import Count
+from api.models import Course, Enrolled, Instructors
+from api.models import User, Attendance
 
 
 def get_tokens_for_user(user):
@@ -37,145 +34,128 @@ def get_tokens_for_user(user):
 
 
 class UserView(APIView):
+    users = {'Admin': 'admin', 'Teacher': 'teacher', 'Student': 'student'}
     permission_classes = [IsAuthenticated]
     renderer_classes = [UserRenderer]
 
-    def get(self, request, format=None):
-        if request.user.usertype == 'admin':
+    def get(self, request):
+        """This function return user on base of requested role based on request. It works only for admins."""
+        if request.user.usertype == self.users['Admin']:
             usertype = request.GET.get('usertype')
             if usertype == None or usertype == 'All':
-                users = User.objects.all()
+                users = User.objects.filter(is_active=True)
             else:
-                try:
-                    users = User.objects.filter(usertype=usertype)
-                except:
-                    return Response({'error': "UserType not provided!"}, status=status.HTTP_404_NOT_FOUND)
-
-            serializer = UserRegistrationSerializer(users, many=True)
-            return Response({'users': serializer.data},
-                            status=status.HTTP_200_OK)
-
-        return Response({'error': "Only admins can add, edit or delete data!"}, status=status.HTTP_401_UNAUTHORIZED)
+                users = User.objects.filter(usertype=usertype, is_active=True)
+            userSerializer = UserRegistrationSerializer(users, many=True)
+            return Response({'users': userSerializer.data}, status=status.HTTP_200_OK)
+        return Response({'error': "Only admins can View Users!"}, status=status.HTTP_401_UNAUTHORIZED)
 
     def post(self, request):
-        if request.user.usertype == 'admin':
-            print("ADMIN")
-            serializer = UserRegistrationSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
+        """This function creates a User with proper role. Only admins can create Users."""
+        if request.user.usertype == self.users['Admin']:
+            userSerializer = UserRegistrationSerializer(data=request.data)
+            userSerializer.is_valid(raise_exception=True)
+            userSerializer.save()
+            return Response({"msg": "User is Registered."}, status=status.HTTP_201_CREATED)
+        return Response({'error': "Only admins can create Users!"}, status=status.HTTP_401_UNAUTHORIZED)
 
-            return Response({"msg": "User is Registered."},
-                            status=status.HTTP_201_CREATED)
-        else:
-            print("error")
-            return Response({'error': "Only admins can add, edit or delete data!"}, status=status.HTTP_401_UNAUTHORIZED)
+    def put(self, request):
+        """This function creates a User with proper role. Only admins can create Users."""
+        if request.user.usertype == self.users['Admin']:
+            change = request.data['change']
+            if change == True:
+                user = User.objects.get(
+                    email=request.data['email'], is_active=False)
+                user.is_active = True
+                user.save(update_fields=['is_active'])
+            elif change == False:
+                print('False')
+                # userSerializer = UserRegistrationSerializer(data=request.data['data'])
+                # userSerializer.is_valid(raise_exception=True)
+                # userSerializer.save()
+            return Response({"msg": "User is Registered."}, status=status.HTTP_201_CREATED)
+        return Response({'error': "Only admins can create Users!"}, status=status.HTTP_401_UNAUTHORIZED)
 
-    def patch(self, request, format=None):
-        if request.user.usertype == 'admin':
-            try:
-                user = User.objects.get(pk=request.data['id'])
-            except:
-                user = False
-
+    def patch(self, request):
+        """This function updates the provided User with provided data. Only admins can update Users."""
+        if request.user.usertype == self.users['Admin']:
+            user = User.objects.get(pk=request.data['id'])
             if user:
-                serializer = UserRegistrationSerializer(
+                userSerializer = UserRegistrationSerializer(
                     user, data=request.data, partial=True)
-                serializer.is_valid(raise_exception=True)
-                serializer.save()
+                userSerializer.is_valid(raise_exception=True)
+                userSerializer.save()
                 return Response({"msg": "User Updated successfully."}, status=status.HTTP_200_OK)
-
             return Response({'error': 'User Not Found!'}, status=status.HTTP_404_NOT_FOUND)
-
         return Response({'error': "Only admins can add, edit or delete data!"}, status=status.HTTP_401_UNAUTHORIZED)
 
-    def delete(self, request, format=None):
-        if request.user.usertype == 'admin':
-            try:
-                user = User.objects.filter(id=request.data['id'])
-            except:
-                user = False
-
+    def delete(self, request):
+        """This function soft deletes the requested User. Only admins can update Users."""
+        if request.user.usertype == self.users['Admin']:
+            user = User.objects.get(id=request.data['id'])
             if user:
-                user.delete()
+                user.is_active = False
+                user.save(update_fields=['is_active'])
                 return Response({'msg': 'User deleted successfully!'}, status=status.HTTP_200_OK)
-
-            return Response({'error': 'User Not Found!'}, status=status.HTTP_404_NOT_FOUND)
-
+            return Response({'error': 'Requested user Not Found!'}, status=status.HTTP_404_NOT_FOUND)
         return Response({'error': "Only admins can add, edit or delete data!"}, status=status.HTTP_401_UNAUTHORIZED)
 
 
 class UserLoginView(APIView):
     renderer_classes = [UserRenderer]
 
-    def post(self, request, format=None):
-        serializer = UserLoginSerializer(data=request.data)
-
-        if serializer.is_valid(raise_exception=True):
-            email = serializer.data.get('email')
-            password = serializer.data.get('password')
-            user = authenticate(email=email, password=password)
-
-            if user != None:
-                token = get_tokens_for_user(user)
-                return Response({"token": token['access'],
-                                 "usertype": user.usertype,
-                                #  'firstname': user.first_name,
-                                 #  'lastname': user.last_name,
-                                 #  'cnic': user.cnic
-                                 }, status=status.HTTP_200_OK)
-
-            else:
-                return Response({'error': ['Email or Password is not valid!']}, status=status.HTTP_404_NOT_FOUND)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def post(self, request):
+        """This function performs login functionality for all users."""
+        email = request.data['email']
+        password = request.data['password']
+        user = authenticate(email=email, password=password)
+        if user:
+            token = get_tokens_for_user(user)
+            return Response({"token": token['access'], "usertype": user.usertype, 'first_name': user.first_name}, status=status.HTTP_200_OK)
+        return Response({'error': ['Email or Password is not valid!']}, status=status.HTTP_404_NOT_FOUND)
 
 
 class UserProfileView(APIView):
     renderer_classes = [UserRenderer]
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, format=None):
-        serializer = UserProfileSerializer(request.user)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+    def get(self, request):
+        """This function provides profile details for all users."""
+        profileSerializer = UserProfileSerializer(request.user)
+        return Response(profileSerializer.data, status=status.HTTP_200_OK)
 
 
 class UserChangePasswordView(APIView):
     renderer_classes = [UserRenderer]
     permission_classes = [IsAuthenticated]
 
-    def post(self, request, format=None):
-        if check_password(request.data['password'], request.user.password):
-            return Response({"errors": {"OldPassword": "New Password cannot be same as Old."}}, status=status.HTTP_406_NOT_ACCEPTABLE)
-
-        serializer = UserChangePasswordSerializer(
+    def post(self, request):
+        """This function provides change password functionality for all users."""
+        changePassSerializer = UserChangePasswordSerializer(
             data=request.data, context={"user": request.user})
-
-        serializer.is_valid(raise_exception=True)
-
+        changePassSerializer.is_valid(raise_exception=True)
         return Response({"msg": "password changed successfully!"}, status=status.HTTP_200_OK)
 
 
 class SendEmailToUserForPasswordRestView(APIView):
     renderer_classes = [UserRenderer]
 
-    def post(self, request, format=None):
-        serializer = SendEmailTOUserForPasswordResetSerializer(
+    def post(self, request):
+        """This function provides Reset password via email sending functionality for all users."""
+        EmailSerializer = SendEmailTOUserForPasswordResetSerializer(
             data=request.data)
-
-        serializer.is_valid(raise_exception=True)
-
+        EmailSerializer.is_valid(raise_exception=True)
         return Response({"msg": "Password Reset link sent to given Provided Email"}, status=status.HTTP_200_OK)
 
 
-class UserPasswordRestView(APIView):
+class UserPasswordResetView(APIView):
     renderer_classes = [UserRenderer]
 
-    def post(self, request, uid, token, format=None):
+    def post(self, request, uid, token):
+        """This function provides Reset password via email validation functionality for all users."""
         serializer = UserPasswordRestSerializer(
             data=request.data, context={'uid': uid, 'token': token})
-
         serializer.is_valid(raise_exception=True)
-
         return Response({"msg": "password reset successfully."}, status=status.HTTP_200_OK)
 
 
@@ -183,53 +163,48 @@ class UserCourseView(APIView):
     renderer_classes = [UserRenderer]
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, format=None):
-        if request.user.usertype in ['admin', 'student', 'teacher']:
-            if request.GET.get('courseid') and request.user.usertype == 'admin':
-                students = Enrolled.objects.filter(
-                    courseid=request.GET.get('courseid'))
-                StudentSerializer = UserEnrollSerializer(
-                    data=students, many=True)
-                teachers = Instructors.objects.filter(
-                    courseid=request.GET.get('courseid'))
-                TeacherSerializer = UserInstructorsSerializer(
-                    data=teachers, many=True)
-                StudentSerializer.is_valid()
-                TeacherSerializer.is_valid()
-                return Response({"students": list(StudentSerializer.data), 'teachers': list(TeacherSerializer.data)},
+    users = {'Admin': 'admin', 'Teacher': 'teacher', 'Student': 'student'}
+
+    def get(self, request):
+        """This function provides different Courses view depending on for their Role."""
+        if request.user.usertype == self.users['Admin']:
+            if request.GET.get('courseid'):
+                enrolledStudents = Course.objects.prefetch_related('instructors','enrolled').filter(id=request.GET.get(
+                    'courseid'))
+                enrolledStudentSerializer = UserCourseDetailViewSerializer(
+                    data=enrolledStudents, many=True)
+                enrolledStudentSerializer.is_valid()
+                return Response({"coursedetail": list(enrolledStudentSerializer.data)},
                                 status=status.HTTP_200_OK)
-            elif request.user.usertype == 'admin':
-                courses = Course.objects.all()
-                coursesSerializer = UserCourseSerializer(
-                    data=courses, many=True)
-                coursesSerializer.is_valid()
-                return Response({"courses": list(coursesSerializer.data)},
-                                status=status.HTTP_200_OK)
+            courses = Course.objects.all()
+            coursesSerializer = UserCourseSerializer(
+                data=courses, many=True)
+            coursesSerializer.is_valid()
+            return Response({"courses": list(coursesSerializer.data)},
+                            status=status.HTTP_200_OK)
 
-            if request.user.usertype == 'student':
-                allenrolled = Enrolled.objects.filter(
-                    studentid=request.user.id)
-                rem = list(allenrolled.values_list('courseid', flat=True))
+        if request.user.usertype == 'student':
+            allenrolled = Enrolled.objects.filter(
+                studentid=request.user.id)
+            rem = list(allenrolled.values_list('courseid', flat=True))
 
-                courses = Course.objects.all().exclude(id__in=rem)
-                enrolledSerializer = UserEnrollSerializer(
-                    data=allenrolled, many=True)
-                coursesSerializer = UserCourseSerializer(
-                    data=courses, many=True)
-                enrolledSerializer.is_valid()
-                coursesSerializer.is_valid()
-                return Response({"enrolled": list(enrolledSerializer.data), 'courses': list(coursesSerializer.data)},
-                                status=status.HTTP_200_OK)
+            courses = Course.objects.all().exclude(id__in=rem)
+            enrolledSerializer = UserEnrollSerializer(
+                data=allenrolled, many=True)
+            coursesSerializer = UserCourseSerializer(
+                data=courses, many=True)
+            enrolledSerializer.is_valid()
+            coursesSerializer.is_valid()
+            return Response({"enrolled": list(enrolledSerializer.data), 'courses': list(coursesSerializer.data)},
+                            status=status.HTTP_200_OK)
 
-            if request.user.usertype == 'teacher':
-                allenrolled = Enrolled.objects.filter(
-                    courseid=request.GET.get('courseid'))
-                enrolledSerializer = UserEnrollSerializer(
-                    data=allenrolled, many=True)
-                enrolledSerializer.is_valid()
-                return Response({"enrolled": list(enrolledSerializer.data)}, status=status.HTTP_200_OK)
-
-        return Response({'error': "Only admins can add, edit or delete data!"}, status=status.HTTP_401_UNAUTHORIZED)
+        if request.user.usertype == 'teacher':
+            allenrolled = Enrolled.objects.filter(
+                courseid=request.GET.get('courseid'))
+            enrolledSerializer = UserEnrollSerializer(
+                data=allenrolled, many=True)
+            enrolledSerializer.is_valid()
+            return Response({"enrolled": list(enrolledSerializer.data)}, status=status.HTTP_200_OK)
 
     def post(self, request, format=None):
         if request.user.usertype == 'admin':
@@ -301,7 +276,7 @@ class UserEnrollView(APIView):
             return Response({"msg": "Enrollment is Registered."}, status=status.HTTP_201_CREATED)
 
         if request.user.usertype == 'teacher':
-            if request.data['result'] > 100 or request.data['result'] < 0: 
+            if request.data['result'] > 100 or request.data['result'] < 0:
                 return Response({"msg": "Marks should be in range 0-100."}, status=status.HTTP_201_CREATED)
             serializer = UserEnrollSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
@@ -348,7 +323,6 @@ class UserAttendanceView(APIView):
 
     def get(self, request, format=None):
         if request.user.usertype == 'student':
-            print(request.GET.get('courseid'))
             try:
                 attendance = Attendance.objects.filter(
                     studentid=request.user.id, courseid=request.GET.get('courseid'))

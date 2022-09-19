@@ -1,4 +1,5 @@
 # importing serializer
+from dataclasses import fields
 from rest_framework import serializers
 
 # model import
@@ -15,19 +16,14 @@ from rest_framework.validators import UniqueValidator
 from django.utils.encoding import smart_str, force_bytes, DjangoUnicodeDecodeError
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
-from django.contrib.auth.models import Group
-
-from django.db.models import Q
-
-# For User Registration
 
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField(read_only=True)
+    # Serializer For User Registration
 
+    id = serializers.IntegerField(read_only=True)
     email = serializers.EmailField(
         validators=[UniqueValidator(queryset=User.objects.all(), message="Email already exists!")])
-
     password = serializers.CharField(write_only=True)
     first_name = serializers.CharField()
 
@@ -36,49 +32,17 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         fields = ['id', 'email', 'password',
                   'first_name', 'last_name', 'cnic', 'usertype']
 
-    def validate(self, attrs):
-        usertype = attrs.get('usertype')
-
-        if usertype not in ['admin', 'student', 'teacher']:
-            raise serializers.ValidationError("Invalid User Type!")
-
-        return attrs
-
-    def create(self, validated_data):
-
-        if validated_data['usertype'] == 'admin':
-            user = User.objects.create_superuser(**validated_data)
-        else:
-            user = User.objects.create_user(**validated_data)
-
-        return user
-
-
-# For User Login
-
-
-class UserLoginSerializer(serializers.ModelSerializer):
-    email = serializers.CharField()
-
-    class Meta:
-        model = User
-        fields = ['email', 'password']
-
-# For User Profile
-
 
 class UserProfileSerializer(serializers.ModelSerializer):
-    usertype = serializers.CharField(read_only=True)
-
+    # For User Profile
     class Meta:
         model = User
-        fields = ['id', 'email', 'first_name',
-                  'last_name', 'cnic', 'usertype']
-
-# For User Password Change
+        fields = ['id', 'email', 'first_name', 'last_name', 'cnic', 'usertype']
+        read_only_fields = fields
 
 
 class UserChangePasswordSerializer(serializers.ModelSerializer):
+    # For User Password Change
     password = serializers.CharField(write_only=True)
 
     class Meta:
@@ -109,8 +73,7 @@ class SendEmailTOUserForPasswordResetSerializer(serializers.ModelSerializer):
             uid = urlsafe_base64_encode(force_bytes(user.id))
             token = PasswordResetTokenGenerator().make_token(user)
             link = 'http://localhost:3000/reset/'+uid+'/'+token
-            body = 'Click following link to reset your password '+link + \
-                "\n If you donot find email, kindly check spam folder."
+            body = 'Click following link to reset your password '+link
             data = {
                 'subject': "Password Reset Email",
                 'body': body,
@@ -119,7 +82,7 @@ class SendEmailTOUserForPasswordResetSerializer(serializers.ModelSerializer):
             Utils.send_email(data)
             return attrs
         else:
-            raise serializers.ValidationError("User doesnot exists!")
+            raise serializers.ValidationError("User does not exists!")
 
 # For Validating email password reset request
 
@@ -159,30 +122,45 @@ class UserCourseSerializer(serializers.ModelSerializer):
         model = Course
         fields = ['id', 'code', 'name']
 
+class UserCourseDetailViewSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(read_only=True)
+    enrolled = UserProfileSerializer(many=True)
+    instructors = UserProfileSerializer(many=True)
+
+    class Meta:
+        model = Course
+        fields = ['id', 'code', 'name', 'instructors', 'enrolled']
 
 class UserEnrollSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)
+    studentid = UserProfileSerializer()
 
     class Meta:
         model = Enrolled
         fields = ['id', 'courseid', 'studentid', 'result', "year"]
 
+
+class UserInstructorsSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(read_only=True)
+    courseid = UserCourseSerializer()
+    teacherid = UserProfileSerializer()
+
+    class Meta:
+        model = Instructors
+        fields = ['id', 'courseid', 'teacherid', 'year']
+
+
+class UserAttendanceSerializerNew(serializers.ModelSerializer):
+    class Meta:
+        model = Attendance
+        fields = ['id', 'date', 'isabsent']
+
     def to_representation(self, instance):
         rep = super().to_representation(instance)
         rep['studentid'] = UserProfileSerializer(instance.studentid).data
         rep['courseid'] = UserCourseSerializer(instance.courseid).data
         return rep
 
-class UserAttendanceSerializerNew(serializers.ModelSerializer):
-    class Meta:
-        model = Attendance
-        fields = ['id','date', 'isabsent']
-        
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        rep['studentid'] = UserProfileSerializer(instance.studentid).data
-        rep['courseid'] = UserCourseSerializer(instance.courseid).data
-        return rep
 
 class UserAttendanceSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)
@@ -221,22 +199,3 @@ class UserAttendanceSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['date'] = datetime.date.today()
         return super().create(validated_data)
-
-
-class UserInstructorsSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField(read_only=True)
-    class Meta:
-        model = Instructors
-        fields = ['id', 'teacherid', 'courseid']
-
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        rep['teacherid'] = UserProfileSerializer(instance.teacherid).data
-        rep['courseid'] = UserCourseSerializer(instance.courseid).data
-        return rep
-
-
-class UserInstructors(serializers.Serializer):
-    id= serializers.IntegerField()
-    first_name = serializers.CharField()
-
