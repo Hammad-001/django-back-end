@@ -109,7 +109,6 @@ class UserPasswordRestSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     "Token is not Valid or Expired.")
             user.set_password(password)
-            print(user.password)
             user.save()
             return super().validate(attrs)
         except DjangoUnicodeDecodeError:

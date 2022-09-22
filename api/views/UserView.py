@@ -110,7 +110,6 @@ class UserLoginView(APIView):
 
     def post(self, request):
         """This function performs login functionality for all users."""
-        print("I am Here------------------------------------------------")
         email = request.data['email']
         password = request.data['password']
         user = authenticate(email=email, password=password, is_active=True)
