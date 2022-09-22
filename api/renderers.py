@@ -1,10 +1,9 @@
 from rest_framework.renderers import JSONRenderer
 import json
 
-# to show errors in frontend creating a custom json renderer
-
 
 class UserRenderer(JSONRenderer):
+    # to show errors in frontend creating a custom json renderer
     charset = "utf-8"
 
     def render(self, data, accepted_media_type=None, renderer_context=None):

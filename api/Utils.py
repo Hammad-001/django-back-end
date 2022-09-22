@@ -3,7 +3,6 @@ import os
 
 
 class Utils:
-
     # for Sending Email
     @staticmethod
     def send_email(data):
