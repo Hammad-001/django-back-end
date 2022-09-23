@@ -63,8 +63,12 @@ class UserView(APIView):
         """This function creates a User with proper role. Only admins can create Users."""
         if request.user.usertype == Roles['Admin']:
             change = request.data['change']
-            user = User.objects.get(
-                email=request.data['email'], is_active=False)
+            try:
+                user = User.objects.get(
+                    email=request.data['email'], is_active=False)
+            except:
+                return Response({"msg": "User Not Found."}, status=status.HTTP_400_BAD_REQUEST)
+
             if change == True:
                 user.is_active = True
                 user.save(update_fields=['is_active'])
