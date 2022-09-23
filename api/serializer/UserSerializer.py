@@ -73,8 +73,8 @@ class SendEmailTOUserForPasswordResetSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         email = attrs.get('email')
-        if User.objects.filter(email=email).exists():
-            user = User.objects.get(email=email)
+        user = User.objects.get(email=email)
+        if user != None:
             uid = urlsafe_base64_encode(force_bytes(user.id))
             token = PasswordResetTokenGenerator().make_token(user)
             link = 'http://localhost:3000/reset/'+uid+'/'+token
